@@ -24,12 +24,12 @@ local INTRO_SOUND = "rbxassetid://99936497230394"
 local HITBOX_SIZE = Vector3.new(30, 30, 30)
 local HITBOX_NAME = "Hitbox expender by epiclnfantry"
 
-local REPAIR_RANGE = 13
+local REPAIR_RANGE = 14
 local REPAIR_INTERVAL = 0
 
 local PUSH_RANGE = 30
-local PUSH_INTERVAL = 0.1
-local PUSH_COOLDOWN = 0.3
+local PUSH_INTERVAL = 0
+local PUSH_COOLDOWN = 0.2
 
 local DEFAULT_SPEED = 19
 local BONUS_SPEED = 5
