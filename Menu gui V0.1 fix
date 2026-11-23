@@ -15,9 +15,9 @@ local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 
 -- ASSETS
-local BG_IMAGE = "rbxassetid://94209968726373"
+local BG_IMAGE = "rbxassetid://105232558442634"
 local HOME_IMAGE = "rbxassetid://6824987866"
-local INTRO_IMAGE = "rbxassetid://120731028415990"
+local INTRO_IMAGE = "rbxassetid://121041620577917"
 local INTRO_SOUND = "rbxassetid://138857089980331"
 
 -- SETTINGS
