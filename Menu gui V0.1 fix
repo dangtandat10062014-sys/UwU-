@@ -15,10 +15,10 @@ local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 
 -- ASSETS
-local BG_IMAGE = "rbxassetid://105232558442634"
-local HOME_IMAGE = "rbxassetid://121041620577917"
-local INTRO_IMAGE = "rbxassetid://120820682509222"
-local INTRO_SOUND = "rbxassetid://99936497230394"
+local BG_IMAGE = "rbxassetid://94209968726373"
+local HOME_IMAGE = "rbxassetid://6824987866"
+local INTRO_IMAGE = "rbxassetid://120731028415990"
+local INTRO_SOUND = "rbxassetid://138857089980331"
 
 -- SETTINGS
 local HITBOX_SIZE = Vector3.new(30, 30, 30)
@@ -31,7 +31,7 @@ local PUSH_RANGE = 30
 local PUSH_INTERVAL = 0
 local PUSH_COOLDOWN = 0.2
 
-local DEFAULT_SPEED = 19
+local DEFAULT_SPEED = 17
 local BONUS_SPEED = 5
 
 local RED = Color3.fromRGB(225, 25, 35)
