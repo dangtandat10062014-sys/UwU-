@@ -31,6 +31,9 @@ local PUSH_RANGE = 30
 local PUSH_INTERVAL = 0
 local PUSH_COOLDOWN = 0.2
 
+local INF_SCAN_INTERVAL = 0.05
+local INF_NORMAL_DELAY = 0.6
+
 local DEFAULT_SPEED = 17
 local BONUS_SPEED = 5
 
@@ -38,6 +41,17 @@ local RED = Color3.fromRGB(225, 25, 35)
 local WHITE = Color3.fromRGB(255, 255, 255)
 local BLACK = Color3.fromRGB(12, 12, 15)
 local DARK = Color3.fromRGB(24, 24, 28)
+
+-- INF CHARGE ANIMATIONS
+local INF_IMMEDIATE = {
+    ["15345113937"] = true, -- Shove
+    ["15352533770"] = true  -- ShovePrepare
+}
+
+local INF_IGNORED = {
+    ["12638400656"] = true, -- Equip
+    ["12638401607"] = true  -- Hold
+}
 
 -- STATE
 local State = {
@@ -48,6 +62,7 @@ local State = {
     Hitbox = false,
     Repair = false,
     AutoPush = false,
+    InfCharge = false,
     Music = false,
     Speed = false,
     Callout = false
@@ -64,6 +79,12 @@ local internalSpeedChange = false
 local Character
 local Humanoid
 local RootPart
+
+-- INF CHARGE STATE
+local InfAnimationConnection
+local InfScanGeneration = 0
+local InfLifecycleGeneration = 0
+local InfNearbyZombies = {}
 
 local function updateCharacter(character)
     Character = character
@@ -519,7 +540,6 @@ local function getEquippedToolRemote()
         return nil
     end
 
-    -- Lấy Tool đang cầm, không kiểm tra tên
     local tool = character:FindFirstChildOfClass("Tool")
 
     if not tool then
@@ -630,7 +650,290 @@ task.spawn(function()
     end
 end)
 
+--=================================================
+-- NO CHARGE NEED - FORGEHAMMER
+--=================================================
+
+local function getForgehammer()
+    local character = Player.Character
+    local tool = character and character:FindFirstChild("Forgehammer")
+
+    if tool and tool:IsA("Tool") then
+        return tool
+    end
+
+    return nil
+end
+
+local function getForgehammerRemote()
+    local tool = getForgehammer()
+    local remote = tool and tool:FindFirstChild("RemoteEvent", true)
+
+    if remote and remote:IsA("RemoteEvent") then
+        return remote
+    end
+
+    return nil
+end
+
+local function scanInfZombies()
+    table.clear(InfNearbyZombies)
+
+    local character = Player.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    local zombies = Workspace:FindFirstChild("Zombies")
+
+    if not root or not zombies then
+        return
+    end
+
+    for _, zombie in ipairs(zombies:GetChildren()) do
+        if zombie:IsA("Model") then
+            local part = getZombiePart(zombie)
+
+            if part then
+                local distance = (root.Position - part.Position).Magnitude
+
+                if distance <= PUSH_RANGE then
+                    table.insert(InfNearbyZombies, {
+                        Model = zombie,
+                        Part = part
+                    })
+                end
+            end
+        end
+    end
+end
+
+local function pushInfZombies()
+    if not State.InfCharge then
+        return
+    end
+
+    local remote = getForgehammerRemote()
+    local character = Player.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    local zombies = Workspace:FindFirstChild("Zombies")
+
+    if not remote or not root or not zombies then
+        return
+    end
+
+    local targets = {}
+
+    for _, target in ipairs(InfNearbyZombies) do
+        table.insert(targets, target)
+    end
+
+    if #targets == 0 then
+        return
+    end
+
+    local success, err = pcall(function()
+        remote:FireServer("StopBraceBlock")
+    end)
+
+    if not success then
+        warn("Inf Charge Remote Error:", err)
+        return
+    end
+
+    for _, target in ipairs(targets) do
+        if not State.InfCharge then
+            break
+        end
+
+        local zombie = target.Model
+        local part = target.Part
+
+        if zombie.Parent == zombies and part.Parent then
+            local currentCharacter = Player.Character
+            local currentRoot = currentCharacter
+                and currentCharacter:FindFirstChild("HumanoidRootPart")
+
+            if not currentRoot then
+                break
+            end
+
+            local distance = (currentRoot.Position - part.Position).Magnitude
+
+            if distance <= PUSH_RANGE then
+                pcall(function()
+                    remote:FireServer(
+                        "FeedbackStun",
+                        zombie,
+                        part.Position
+                    )
+                end)
+            end
+        end
+    end
+end
+
+local function disconnectInfAnimation()
+    if InfAnimationConnection then
+        InfAnimationConnection:Disconnect()
+        InfAnimationConnection = nil
+    end
+end
+
+local function isForgehammerAnimation(animation)
+    local tool = getForgehammer()
+
+    if not tool or not animation then
+        return false
+    end
+
+    local folder = tool:FindFirstChild("Animations", true)
+
+    if not folder then
+        return false
+    end
+
+    local playedId = animation.AnimationId:match("%d+")
+
+    if not playedId or INF_IGNORED[playedId] then
+        return false
+    end
+
+    for _, object in ipairs(folder:GetDescendants()) do
+        if object:IsA("Animation") then
+            local toolId = object.AnimationId:match("%d+")
+
+            if toolId == playedId then
+                return true, playedId
+            end
+        end
+    end
+
+    return false
+end
+
+local function connectInfAnimation()
+    disconnectInfAnimation()
+
+    if not State.InfCharge then
+        return
+    end
+
+    local character = Player.Character
+
+    if not character then
+        return
+    end
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+    if not humanoid then
+        return
+    end
+
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+        or humanoid:WaitForChild("Animator", 5)
+
+    if not animator or not State.InfCharge then
+        return
+    end
+
+    InfAnimationConnection = animator.AnimationPlayed:Connect(function(track)
+        if not State.InfCharge or not getForgehammer() then
+            return
+        end
+
+        local animation = track.Animation
+
+        if not animation then
+            return
+        end
+
+        local valid, animationId = isForgehammerAnimation(animation)
+
+        if not valid then
+            return
+        end
+
+        local lifecycle = InfLifecycleGeneration
+        local delayTime = INF_IMMEDIATE[animationId]
+            and 0
+            or INF_NORMAL_DELAY
+
+        task.delay(delayTime, function()
+            if not State.InfCharge then
+                return
+            end
+
+            if lifecycle ~= InfLifecycleGeneration then
+                return
+            end
+
+            if not getForgehammer() then
+                return
+            end
+
+            pushInfZombies()
+        end)
+    end)
+end
+
+local function startInfScanner()
+    InfScanGeneration += 1
+    local generation = InfScanGeneration
+
+    task.spawn(function()
+        while State.InfCharge
+            and generation == InfScanGeneration
+            and gui.Parent do
+
+            scanInfZombies()
+            task.wait(INF_SCAN_INTERVAL)
+        end
+    end)
+end
+
+local function stopInfScanner()
+    InfScanGeneration += 1
+    table.clear(InfNearbyZombies)
+end
+
+toggle("No charge need (for forge hammer)", function(v)
+    State.InfCharge = v
+
+    if v then
+        InfLifecycleGeneration += 1
+        connectInfAnimation()
+        startInfScanner()
+    else
+        InfLifecycleGeneration += 1
+        disconnectInfAnimation()
+        stopInfScanner()
+    end
+end)
+
+--=================================================
+-- INF CHARGE RESPAWN SUPPORT
+--=================================================
+
+Player.CharacterAdded:Connect(function(character)
+    disconnectInfAnimation()
+    stopInfScanner()
+    InfLifecycleGeneration += 1
+
+    if State.InfCharge then
+        task.spawn(function()
+            local humanoid = character:WaitForChild("Humanoid", 10)
+
+            if humanoid and State.InfCharge then
+                connectInfAnimation()
+                startInfScanner()
+            end
+        end)
+    end
+end)
+
+--=================================================
 -- AUTO PLAY MUSIC
+--=================================================
+
 _G.MusicianAutoPlay = false
 
 local function HookBeatTracker()
@@ -988,4 +1291,21 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
-print("holy AI slop 🫩✌️🥀")
+--=================================================
+-- CLEANUP
+--=================================================
+
+gui.Destroying:Connect(function()
+    State.InfCharge = false
+    InfLifecycleGeneration += 1
+    InfScanGeneration += 1
+
+    if InfAnimationConnection then
+        InfAnimationConnection:Disconnect()
+        InfAnimationConnection = nil
+    end
+
+    table.clear(InfNearbyZombies)
+end)
+
+print("MS STOREN V1 + INF CHARGE LOADED")
